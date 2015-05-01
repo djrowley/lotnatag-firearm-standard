@@ -26,7 +26,7 @@ const int reloadInt = 1;     // pin 3
 
 
 // fire pulse settings
-const int carrierHz = 57660;
+const int carrierHz = 57600;
 const int signalHz = 1800;
 Tone carrierTone;
 Tone signalTone;
@@ -41,43 +41,48 @@ const int maxShots = 40;
 int remainingShots;
 
 void setup() {
+  // for logging
+  Serial.begin(9600);
+  
   // set up fire pins
   pinMode(carrierPin, OUTPUT);
   pinMode(signalPin, OUTPUT);
   pinMode(audioPin, OUTPUT);
   carrierTone.begin(carrierPin);
   signalTone.begin(signalPin);
-  carrierTone.play(carrierHz);
-  
 
-  
   
   // set up notification pins
   pinMode(redLedPin, OUTPUT);
   pinMode(greenLedPin, OUTPUT);
+  
+  digitalWrite(redLedPin, HIGH);
   
 
   // set up input pins
   pinMode(triggerPin, INPUT_PULLUP);
   pinMode(reloadPin, INPUT_PULLUP);
   
-  attachInterrupt(reloadInt, setReload, FALLING);   // reload interrupt should be allowed from the start
-
-  
   triggerPressed = false;
   reloadPressed = false;
   
   // fill the clip
   remainingShots = maxShots;
+  
+  delay(1500);
+  digitalWrite(redLedPin, LOW);
 }
 
-void loop() {
-  triggerPressed = false;
-  reloadPressed = false;
+void loop() { 
+  // wipe the interrupt flags so we don't get repeated presses from last time, or other spurious interrupts
+  EIFR = 1;  // clear flag for interrupt 0
+  EIFR = 2;  // clear flag for interrupt 1
   
-  // put your main code here, to run repeatedly: 
+  // wait here until a button is pressed
   waitUntilInput();
   
+  // now do the appropriate action  
+
   if(triggerPressed)
   {
     fireWeapon();
@@ -87,46 +92,41 @@ void loop() {
     reloadWeapon();
   }
 
+  // whatever we did, wipe the action flags
   triggerPressed = false;
   reloadPressed = false;
 }
 
 void waitUntilInput()
-{
+{ 
   set_sleep_mode(SLEEP_MODE_IDLE);           // can't use any other as we want to use falling state for interrupt, can only use IDLE at lower awareness levels
   sleep_enable();                            // allow sleep
   
-  attachInterrupt(fireInt, setFire, HIGH);    // fire interrupt should be allowed from start
+  attachInterrupt(fireInt, setFire, FALLING);    // fire interrupt should be allowed from start
+  attachInterrupt(reloadInt, setReload, FALLING);   // reload interrupt should be allowed from the start
   
   sleep_cpu();
 
   // Re-enter here after interrupt
-  sleep_disable();                           // unset the flag allowing cpu sleep    
-  
-  // make sure both detached
-  detachInterrupt(fireInt);  
+  sleep_disable();                           // unset the flag allowing cpu sleep   
 }
 
 void setFire()
 {
-  detachInterrupt(fireInt);
-  // debounce interrupt
-  unsigned long currentTime = millis();
-  if(currentTime - lastInterruptTime > 150)
-  {
-    triggerPressed = true;
-  }
-  lastInterruptTime = currentTime;
+  // Detach fire interrupt ASAP!
+  detachInterrupt(fireInt); 
+  detachInterrupt(reloadInt);
+
+  triggerPressed = true;
 }
 
 void setReload()
 {
-  unsigned long currentTime = millis();
-  if(currentTime - lastInterruptTime > 150)
-  {
-    reloadPressed = true;
-  }
-  lastInterruptTime = currentTime;
+  // Detach reload interrupt ASAP!
+  detachInterrupt(reloadInt);
+  detachInterrupt(fireInt);  
+  
+  reloadPressed = true;
 }
 
 /// Try and fire the weapon - if there is enough ammo left fires a tag pulse, otherwise flashes red led to notify
@@ -145,26 +145,25 @@ void fireWeapon()
 
 void reloadWeapon()
 {
-  for(int i =0; i<8; i++)
-  {
-    digitalWrite(redLedPin, HIGH);
-    digitalWrite(greenLedPin, LOW);
-    delay(200);
-    digitalWrite(redLedPin, LOW);
-    digitalWrite(greenLedPin, HIGH);
-    delay(200);
-  }
-  
-  remainingShots = maxShots;
-  
-  for(int i =0; i<3; i++)
-  {
-    digitalWrite(greenLedPin, HIGH);
-    delay(100);
-    digitalWrite(greenLedPin, LOW);
-    delay(100);
-  }
-  reloadPressed = false;
+    for(int i =0; i<8; i++)
+    {
+      digitalWrite(redLedPin, HIGH);
+      digitalWrite(greenLedPin, LOW);
+      delay(200);
+      digitalWrite(redLedPin, LOW);
+      digitalWrite(greenLedPin, HIGH);
+      delay(200);
+    }
+    
+    remainingShots = maxShots;
+    
+    for(int i =0; i<3; i++)
+    {
+      digitalWrite(greenLedPin, HIGH);
+      delay(100);
+      digitalWrite(greenLedPin, LOW);
+      delay(100);
+    }
 }
 
 void notifyOutOfAmmo()
@@ -179,9 +178,10 @@ void notifyOutOfAmmo()
 }
 
 void emitTagPulse() {
+  carrierTone.play(carrierHz, 50);
   signalTone.play(signalHz, 45);
-  digitalWrite(audioPin, HIGH);
+  
+  //digitalWrite(audioPin, HIGH);
   delay(200);
-  digitalWrite(audioPin, LOW);
-
+  //digitalWrite(audioPin, LOW);
 }
