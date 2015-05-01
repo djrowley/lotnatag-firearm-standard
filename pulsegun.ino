@@ -15,6 +15,9 @@ const int audioPin = 10;
 // input pins
 const int triggerPin = 2;
 const int reloadPin = 3;
+const int modePin = 4;
+
+
 // debounce settings
 unsigned long lastInterruptTime = 0;
 
@@ -31,6 +34,9 @@ const int signalHz = 1800;
 Tone carrierTone;
 Tone signalTone;
 
+// mode settings
+const int mode_auto = HIGH; // note that auto will be default behaviour if pin 4 is unconnected due to use of pullup
+const int mode_single = LOW;
 
 
 // program behaviour values
@@ -62,6 +68,7 @@ void setup() {
   // set up input pins
   pinMode(triggerPin, INPUT_PULLUP);
   pinMode(reloadPin, INPUT_PULLUP);
+  pinMode(modePin, INPUT_PULLUP);
   
   triggerPressed = false;
   reloadPressed = false;
@@ -132,15 +139,34 @@ void setReload()
 /// Try and fire the weapon - if there is enough ammo left fires a tag pulse, otherwise flashes red led to notify
 void fireWeapon()
 {
-  if(remainingShots <= 0)
+  bool continueFiring;
+  do
   {
-    notifyOutOfAmmo();
-  }
-  else
-  {
-    emitTagPulse();
-    remainingShots --;
-  }
+    continueFiring = false;
+    
+    if(remainingShots <= 0)
+    {
+      notifyOutOfAmmo();
+    }
+    else
+    {
+      emitTagPulse();
+      remainingShots --;
+    }
+    
+    int fireMode = digitalRead(modePin);
+    if(fireMode == mode_auto)
+    {  
+      // check if triggerPin is LOW, if so fire again.
+      int triggerState = digitalRead(triggerPin);
+      if(triggerState == LOW)
+      {
+        continueFiring = true;
+      }
+    }
+  } while (continueFiring);
+  
+  
 }
 
 void reloadWeapon()
