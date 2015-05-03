@@ -7,7 +7,7 @@ Pin Usage:
 
 3   INPUT   reload  - connect to gound to reload
 
-4   -
+4   INPUT   mode selection - HIGH (default) = automatic, LOW = single-shot
 
 5   OUTPUT tag pulse carrier 57600 kHZ - AND with pin 6 to get tag pulse
 
