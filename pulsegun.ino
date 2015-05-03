@@ -1,15 +1,18 @@
-#include <Tone.h>
 #include <avr/interrupt.h>
 #include <avr/sleep.h>
+#include <avr/pgmspace.h>
+#include <Arduino.h>
+#include <pins_arduino.h>
+#include <TagTone.h>
+
 
 // output pins
-const int carrierPin = 5;
+const int pulsePin = 5;
 const int signalPin = 6;
-
 const int redLedPin = 7;
 const int greenLedPin = 8;
 
-const int audioPin = 10;
+const int audioPin = 9;
 
 
 // input pins
@@ -31,8 +34,8 @@ const int reloadInt = 1;     // pin 3
 // fire pulse settings
 const int carrierHz = 57600;
 const int signalHz = 1800;
-Tone carrierTone;
-Tone signalTone;
+TagTone carrierTone;
+TagTone signalTone;
 
 // mode settings
 const int mode_auto = HIGH; // note that auto will be default behaviour if pin 4 is unconnected due to use of pullup
@@ -47,16 +50,13 @@ const int maxShots = 40;
 int remainingShots;
 
 void setup() {
-  // for logging
-  Serial.begin(9600);
-  
+
   // set up fire pins
-  pinMode(carrierPin, OUTPUT);
+  pinMode(pulsePin, OUTPUT);
   pinMode(signalPin, OUTPUT);
   pinMode(audioPin, OUTPUT);
-  carrierTone.begin(carrierPin);
-  signalTone.begin(signalPin);
-
+  carrierTone.beginCarrier(pulsePin);
+  signalTone.beginSignal(signalPin);
   
   // set up notification pins
   pinMode(redLedPin, OUTPUT);
@@ -64,7 +64,6 @@ void setup() {
   
   digitalWrite(redLedPin, HIGH);
   
-
   // set up input pins
   pinMode(triggerPin, INPUT_PULLUP);
   pinMode(reloadPin, INPUT_PULLUP);
@@ -151,6 +150,9 @@ void fireWeapon()
     else
     {
       emitTagPulse();
+      //digitalWrite(audioPin, HIGH);
+      delay(200);
+      //digitalWrite(audioPin, LOW);
       remainingShots --;
     }
     
@@ -204,10 +206,24 @@ void notifyOutOfAmmo()
 }
 
 void emitTagPulse() {
-  carrierTone.play(carrierHz, 50);
-  signalTone.play(signalHz, 45);
-  
-  //digitalWrite(audioPin, HIGH);
-  delay(200);
-  //digitalWrite(audioPin, LOW);
+    digitalWrite(signalPin, HIGH);
+    carrierTone.playCarrier();
+    
+    delay(60);
+    digitalWrite(signalPin, LOW);
+
+    //digitalWrite(audioPin, HIGH);
+    delay(200);
+
 }
+
+
+
+
+
+
+
+
+
+
+
