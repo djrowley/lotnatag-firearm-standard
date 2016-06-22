@@ -1,15 +1,29 @@
-#include <Tone.h>
 #include <avr/interrupt.h>
 #include <avr/sleep.h>
+#include <avr/pgmspace.h>
+#include <Arduino.h>
+#include <pins_arduino.h>
+#include <TagTone.h>
+
+// audio
+#include <SD.h>
+#include <SPI.h>
+#define SD_ChipSelectPin 10
+#include <TMRpcm.h>
+
+TMRpcm tmrpcm;
 
 // output pins
-const int carrierPin = 5;
+const int pulsePin = 5;
 const int signalPin = 6;
-
 const int redLedPin = 7;
 const int greenLedPin = 8;
 
-const int audioPin = 10;
+
+
+// sd pins for reference
+const int audioPin = 9;
+
 
 
 // input pins
@@ -22,7 +36,6 @@ const int modePin = 4;
 unsigned long lastInterruptTime = 0;
 
 
-
 // interrupts
 const int fireInt = 0;   // pin 2
 const int reloadInt = 1;     // pin 3
@@ -31,8 +44,8 @@ const int reloadInt = 1;     // pin 3
 // fire pulse settings
 const int carrierHz = 57600;
 const int signalHz = 1800;
-Tone carrierTone;
-Tone signalTone;
+TagTone carrierTone;
+TagTone signalTone;
 
 // mode settings
 const int mode_auto = HIGH; // note that auto will be default behaviour if pin 4 is unconnected due to use of pullup
@@ -47,24 +60,22 @@ const int maxShots = 40;
 int remainingShots;
 
 void setup() {
-  // for logging
-  Serial.begin(9600);
-  
+
+  digitalWrite(greenLedPin, HIGH);
   // set up fire pins
-  pinMode(carrierPin, OUTPUT);
+  pinMode(pulsePin, OUTPUT);
   pinMode(signalPin, OUTPUT);
   pinMode(audioPin, OUTPUT);
-  carrierTone.begin(carrierPin);
-  signalTone.begin(signalPin);
 
+  carrierTone.beginCarrier(pulsePin);
+  //signalTone.beginSignal(signalPin);
   
   // set up notification pins
   pinMode(redLedPin, OUTPUT);
   pinMode(greenLedPin, OUTPUT);
   
-  digitalWrite(redLedPin, HIGH);
+  //digitalWrite(redLedPin, HIGH);
   
-
   // set up input pins
   pinMode(triggerPin, INPUT_PULLUP);
   pinMode(reloadPin, INPUT_PULLUP);
@@ -76,26 +87,57 @@ void setup() {
   // fill the clip
   remainingShots = maxShots;
   
-  delay(1500);
-  digitalWrite(redLedPin, LOW);
+  tmrpcm.speakerPin = 9;
+  tmrpcm.setVolume(5);
+  tmrpcm.quality(1);
+  
+  if(!SD.begin(SD_ChipSelectPin))
+  {
+    digitalWrite(greenLedPin, LOW);
+    digitalWrite(redLedPin, HIGH);
+    delay(1500);
+    digitalWrite(redLedPin, LOW);
+    // note
+  }
+  else
+  {
+      delay(1500);
+      digitalWrite(greenLedPin, LOW);
+      tmrpcm.play("ready.wav");
+  }
+  
+
 }
 
 void loop() { 
   // wipe the interrupt flags so we don't get repeated presses from last time, or other spurious interrupts
   EIFR = 1;  // clear flag for interrupt 0
   EIFR = 2;  // clear flag for interrupt 1
-  
-  // wait here until a button is pressed
-  waitUntilInput();
+  if(tmrpcm.isPlaying())
+  {
+    // continue
+  }
+  else
+  {
+    
+    tmrpcm.disable();
+    pinMode(audioPin, INPUT);
+    // wait here until a button is pressed
+    waitUntilInput();
+  }
   
   // now do the appropriate action  
 
   if(triggerPressed)
   {
+    tmrpcm.disable();
+    pinMode(audioPin, OUTPUT);
     fireWeapon();
   }
   else if (reloadPressed)
   {
+    tmrpcm.disable();
+    pinMode(audioPin, OUTPUT);
     reloadWeapon();
   }
 
@@ -151,6 +193,9 @@ void fireWeapon()
     else
     {
       emitTagPulse();
+      //digitalWrite(audioPin, HIGH);
+      delay(200);
+      //digitalWrite(audioPin, LOW);
       remainingShots --;
     }
     
@@ -171,6 +216,7 @@ void fireWeapon()
 
 void reloadWeapon()
 {
+    tmrpcm.play("rld_beg.wav");
     for(int i =0; i<8; i++)
     {
       digitalWrite(redLedPin, HIGH);
@@ -179,10 +225,19 @@ void reloadWeapon()
       digitalWrite(redLedPin, LOW);
       digitalWrite(greenLedPin, HIGH);
       delay(200);
+      
+      if(i ==1)
+      {
+        // stop playing sound after 800ms
+        tmrpcm.disable();
+        pinMode(audioPin, INPUT);
+      }
+      
     }
     
     remainingShots = maxShots;
-    
+    pinMode(audioPin, OUTPUT);
+    tmrpcm.play("rld_end.wav");
     for(int i =0; i<3; i++)
     {
       digitalWrite(greenLedPin, HIGH);
@@ -190,10 +245,12 @@ void reloadWeapon()
       digitalWrite(greenLedPin, LOW);
       delay(100);
     }
+    
 }
 
 void notifyOutOfAmmo()
 {
+  tmrpcm.play("fire_ooa.wav");
   for(int i =0; i<5; i++)
   {
     digitalWrite(redLedPin, HIGH);
@@ -201,13 +258,31 @@ void notifyOutOfAmmo()
     digitalWrite(redLedPin, LOW);
     delay(100);
   }
+  delay(2000);
 }
 
 void emitTagPulse() {
-  carrierTone.play(carrierHz, 50);
-  signalTone.play(signalHz, 45);
+    digitalWrite(signalPin, HIGH);
+    carrierTone.playCarrier();
+    
+    delay(60);
+    digitalWrite(signalPin, LOW);
+    
+    tmrpcm.play("fire_a.wav");
+    //signalTone.playSignal(45);
   
-  //digitalWrite(audioPin, HIGH);
-  delay(200);
-  //digitalWrite(audioPin, LOW);
+    //digitalWrite(audioPin, HIGH);
+    delay(200);
+
 }
+
+
+
+
+
+
+
+
+
+
+

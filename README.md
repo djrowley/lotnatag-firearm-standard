@@ -9,9 +9,9 @@ Pin Usage:
 
 4   INPUT   mode selection - HIGH (default) = automatic, LOW = single-shot
 
-5   OUTPUT tag pulse carrier 57600 kHZ - AND with pin 6 to get tag pulse
+5   OUTPUT tag pulse waveform fo 57600 & 1800
 
-6   OUTPUT tag pulse signal 1800 Hz - AND with pin 5 to get tag pulse
+6   OUTPUT currently provides HIGH while pulse generated
 
 7   OUTPUT red indicator LED
 
@@ -19,4 +19,4 @@ Pin Usage:
 
 9   
 
-10  OUTPUT audio trigger
+10  
