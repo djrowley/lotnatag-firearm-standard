@@ -1,4 +1,7 @@
 # pulsegun
+
+This is the version 1 of the code running on the guns built May 2016.
+
 An Arduino based laser-tag system - this repository is for the code running on the weapon itself. 
 
 Pin Usage:
