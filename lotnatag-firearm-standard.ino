@@ -2,10 +2,10 @@
   /*-----------------------------------------------------------------------
   
   Project: LOTNAtag Firearm (Standard Version)
-  Version: 1.1
+  Version: 2.0
   Description: A basic laser tag system for Arduino, compatible with the Starlyte
   
-  Copyright (c) 2016 David Rowley
+  Copyright (c) 2018 David Rowley
   
   Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
   
@@ -23,21 +23,17 @@
   #include <TagTone.h>
   
   // audio
-  #include <SD.h>
-  #include <SPI.h>
-  #define SD_ChipSelectPin 10
-  #include <TMRpcm.h>
+  #include "SoftwareSerial.h"
+  #include "DFRobotDFPlayerMini.h"
   
-  TMRpcm tmrpcm;
-  
+
   // output pins
   const int pulsePin = 5;
-  const int signalPin = 6;
+  const int muzzlePin = 6;
   const int redLedPin = 7;
   const int greenLedPin = 8;
+  // 10 and 11 are used for software serial
   
-  // sd pins for reference
-  const int audioPin = 9;
   
   // input pins
   const int triggerPin = 2;
@@ -61,17 +57,20 @@
   
   
   // behaviour variables
-  const int mode_auto = LOW;
-  const int mode_single = HIGH;  // note that single will be default behaviour if pin 4 is unconnected due to use of pullup
+  const int mode_auto = HIGH;
+  const int mode_single = LOW;  // note that single will be default behaviour if pin 4 is unconnected due to use of pullup
   
   const int startupDelayMs = 1500;
   const int reloadDurationMs = 5000;
   const int shotDuration = 250;
-  const int maxShots = 16;
+  const int maxShots = 30;
 
  
   
-  // sound names
+  // sound settings
+
+  SoftwareSerial dfSerial(10, 11); // RX, TX
+  DFRobotDFPlayerMini dfPlayer;
   
   char* soundStartup       = "ready.wav";
   char* soundFire          = "p90shot.wav";//"fire_a.wav";
@@ -89,20 +88,29 @@
   // Program Code
 
   void setup() {
+    // serial set up
+    //Serial.begin(115200);
+    
     // set up notification pins
     pinMode(redLedPin, OUTPUT);
     pinMode(greenLedPin, OUTPUT);
        
     // set up fire pins
     pinMode(pulsePin, OUTPUT);   
-    pinMode(signalPin, OUTPUT);
+    pinMode(muzzlePin, OUTPUT);
    
-    // set up speaker
-    pinMode(audioPin, OUTPUT);
-    tmrpcm.speakerPin = 9;
-    tmrpcm.setVolume(5);
-    tmrpcm.quality(1);
+    // set up audio
+    dfSerial.begin(9600);
+
+    if(!dfPlayer.begin(dfSerial))
+    {
+      flashPin(redLedPin, 5, 2500);
+    }
   
+    dfPlayer.setTimeOut(500); //Set serial communication time out 500ms
+    dfPlayer.volume(30);  //Set volume value (0~30).
+    dfPlayer.outputDevice(DFPLAYER_DEVICE_SD);
+   
     // set up input pins
     pinMode(triggerPin, INPUT_PULLUP);
     pinMode(reloadPin, INPUT_PULLUP);
@@ -113,18 +121,8 @@
     // fill the clip
     remainingShots = maxShots;
     
-    bool sdReadSuccess = true;
-    
-    if(!SD.begin(SD_ChipSelectPin))
-    {
-      sdReadSuccess = false;
-      flashPin(redLedPin, 5, 2500);
-    }
-    else
-    {
-      tmrpcm.play(soundStartup);
-      flashPin(greenLedPin, 5, 2500);
-    }
+    playStartupSound();
+    flashPin(greenLedPin, 5, 2500);
   }
   
   void loop() { 
@@ -132,31 +130,19 @@
     EIFR = 1;  // clear flag .for interrupt 0
     EIFR = 2;  // clear flag for interrupt 1
     
-    if(tmrpcm.isPlaying())
-    {
-      // continue
-    }
-    else
-    {
-      
-      tmrpcm.disable();
-      pinMode(audioPin, INPUT);
-      // wait here until a button is pressed
-      waitUntilInput();
-    }
+    // wait here until a button is pressed
+    waitUntilInput();
     
     // now do the appropriate action  
   
     if(triggerPressed)
     {
-      tmrpcm.disable();
-      pinMode(audioPin, OUTPUT);
+      //pinMode(audioPin, OUTPUT);
       fireWeapon();
     }
     else if (reloadPressed)
     {
-      tmrpcm.disable();
-      pinMode(audioPin, OUTPUT);
+      //pinMode(audioPin, OUTPUT);
       reloadWeapon();
     }
   
@@ -199,22 +185,9 @@
   
   void reloadWeapon()
   {
-      tmrpcm.play(soundReloadStart);
-      flashPin(greenLedPin, redLedPin, 2.5, reloadDurationMs);
-
-        
-        //if(tmrpcm.isPlaying() != 1)
-        //{
-        //  // stop playing sound after 800ms
-        //  tmrpcm.disable();
-        //  pinMode(audioPin, INPUT);
-        //}
-      
-      
-      //pinMode(audioPin, OUTPUT);
-      
+      flashPin(greenLedPin, redLedPin, 2.5, reloadDurationMs);  
       remainingShots = maxShots; 
-      tmrpcm.play(soundReloadEnd);      
+      playReloadSound();   
   }
   
   /// Try and fire the weapon - if there is enough ammo left fires a tag pulse, otherwise flashes red led to notify
@@ -227,22 +200,22 @@
       
       if(remainingShots <= 0)
       {
+        delay(100);
         notifyOutOfAmmo();
         return;
       }
       else
       {
-        tmrpcm.disable();
-        digitalWrite(signalPin, HIGH);
+        playFireSound();
+        digitalWrite(muzzlePin, HIGH);
         carrierTone.playCarrier();
        
         delay(50);
         carrierTone.stop();
-        tmrpcm.play(soundFire);
-        digitalWrite(signalPin, LOW);
+        
+        digitalWrite(muzzlePin, LOW);
 
-        delay(80); // 50
-      
+        delay(200);
         
         remainingShots --;
       }
@@ -255,13 +228,6 @@
         if(triggerState == LOW)
         {
           continueFiring = true;
-          tmrpcm.disable();
-          digitalWrite(signalPin, HIGH);
-          delay(50);
-          tmrpcm.play(soundFire);
-          digitalWrite(signalPin, LOW);
-
-          delay(80);
         }
       }
     } while (continueFiring);
@@ -270,11 +236,8 @@
   
   void notifyOutOfAmmo()
   {
-    tmrpcm.play(soundOutOfAmmo);
-    do
-    {
-      flashPin(redLedPin, 5);
-    }while(tmrpcm.isPlaying());
+    playOutOfAmmoSound();
+    flashPin(redLedPin, 5, 2000);
   }
   
 
@@ -328,9 +291,26 @@ int flashPin(int pinId, double frequency)
   return flashPin(pinId, 0, frequency, 0);
 }
   
-  
-  
-  
+
+void playStartupSound()
+{
+  dfPlayer.playFolder(1,1);
+}
+
+void playFireSound()
+{
+  dfPlayer.playFolder(2,1);
+}
+
+void playReloadSound()
+{
+  dfPlayer.playFolder(3,1);
+}
+
+void playOutOfAmmoSound()
+{
+  dfPlayer.playFolder(4,1);
+}
   
   
   
