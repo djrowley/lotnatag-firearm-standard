@@ -1,4 +1,3 @@
-  
   /*-----------------------------------------------------------------------
   
   Project: LOTNAtag Firearm (Standard Version)
@@ -57,28 +56,30 @@
   
   
   // behaviour variables
-  const int mode_auto = HIGH;
-  const int mode_single = LOW;  // note that single will be default behaviour if pin 4 is unconnected due to use of pullup
-  
   const int startupDelayMs = 1500;
   const int reloadDurationMs = 5000;
   const int shotDuration = 250;
+
+  
+  
+  const int mode_auto = HIGH;
+  const int mode_single = LOW;  // note that single will be default behaviour if pin 4 is unconnected due to use of pullup
   const int maxShots = 30;
 
- 
+ // Sound files for each action should be in the following locations:
+
+ // File Structure:
+
+ // disk://01/001.wav = Startup
+ // disk://02/001.wav = Fire
+ // disk://03/001.wav = Reload
+ // disk://04/001.wav = Out of Ammo
   
   // sound settings
 
   SoftwareSerial dfSerial(10, 11); // RX, TX
   DFRobotDFPlayerMini dfPlayer;
   
-  char* soundStartup       = "ready.wav";
-  char* soundFire          = "p90shot.wav";//"fire_a.wav";
-  char* soundReloadStart   = "rld_long.wav";
-  char* soundReloadEnd     = "rld_end.wav";
-  char* soundOutOfAmmo     = "fire_ooa.wav";
-
-
   // program behaviour values
   volatile boolean triggerPressed = false;
   volatile boolean reloadPressed = false;
@@ -206,12 +207,12 @@
       }
       else
       {
-        playFireSound();
         digitalWrite(muzzlePin, HIGH);
         carrierTone.playCarrier();
        
         delay(50);
         carrierTone.stop();
+        playFireSound();
         
         digitalWrite(muzzlePin, LOW);
 
